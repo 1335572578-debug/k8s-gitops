@@ -1,0 +1,19 @@
+# 1. 基础配置
+replicaCount: 1
+appName: cacti-web
+
+# 2. 镜像配置 (这里填您之前的 Cacti 镜像名，假设是 ubuntu/cacti)
+image:
+  repository: ubuntu/cacti
+  tag: "latest"
+
+# 3. Service 配置 (因为用了 Ingress，这里无需 NodePort，用内部 ClusterIP 即可)
+service:
+  type: ClusterIP
+  port: 80
+
+# 4. Ingress 域名路由配置 (可通过 enabled 开关决定要不要部署 Ingress)
+ingress:
+  enabled: true
+  className: "nginx"
+  host: "cacti.local"
