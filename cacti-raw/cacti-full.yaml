@@ -1,0 +1,168 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cacti
+---
+# ================= 1. 存储卷 (Storage) =================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cacti-db-pvc
+  namespace: cacti
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: rook-ceph-block
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cacti-rra-pvc
+  namespace: cacti
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: rook-ceph-block
+  resources:
+    requests:
+      storage: 10Gi
+---
+# ================= 2. 数据库层 (MariaDB) =================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cacti-db
+  namespace: cacti
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cacti-db
+  template:
+    metadata:
+      labels:
+        app: cacti-db
+    spec:
+      containers:
+      - name: mariadb
+        # 修改点：移除了失效的 daocloud 代理源，改为官方源
+        image: mariadb:10.11
+        imagePullPolicy: IfNotPresent
+        args:
+        - --character-set-server=utf8mb4
+        - --collation-server=utf8mb4_unicode_ci
+        - --max-connections=200
+        - --max-allowed-packet=16777216
+        - --max-heap-table-size=128M
+        - --tmp-table-size=128M
+        - --join-buffer-size=256M
+        - --innodb-file-per-table=ON
+        - --innodb-buffer-pool-size=1024M
+        - --innodb-doublewrite=ON
+        - --innodb-lock-wait-timeout=50
+        - --innodb-flush-method=O_DIRECT
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: RootPassword123
+        - name: MYSQL_DATABASE
+          value: cacti
+        - name: MYSQL_USER
+          value: cactiuser
+        - name: MYSQL_PASSWORD
+          value: CactiPassword123
+        - name: TZ 
+          value: Asia/Shanghai
+        ports:
+        - containerPort: 3306
+        volumeMounts:
+        - name: db-storage
+          mountPath: /var/lib/mysql
+        - name: tz-config
+          mountPath: /etc/localtime
+          readOnly: true
+      volumes:
+      - name: db-storage
+        persistentVolumeClaim:
+          claimName: cacti-db-pvc
+      - name: tz-config
+        hostPath:
+          path: /etc/localtime
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cacti-db
+  namespace: cacti
+spec:
+  ports:
+  - port: 3306
+  selector:
+    app: cacti-db
+---
+# ================= 3. 应用层 (Cacti Web) =================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cacti-web
+  namespace: cacti
+spec:
+  replicas: 1
+  # 优化点：使用 Recreate 策略，防止后续更新时再次出现 PVC 死锁
+  strategy:
+    type: Recreate 
+  selector:
+    matchLabels:
+      app: cacti-web
+  template:
+    metadata:
+      labels:
+        app: cacti-web
+    spec:
+      containers:
+      - name: cacti
+        image: docker.io/smcline06/cacti:latest
+        imagePullPolicy: IfNotPresent 
+        env:
+        - name: DB_HOST
+          value: cacti-db
+        - name: DB_USER
+          value: cactiuser
+        - name: DB_PASS
+          value: CactiPassword123
+        - name: DB_NAME
+          value: cacti
+        - name: TZ
+          value: Asia/Shanghai
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: rra-storage
+          mountPath: /cacti/rra
+        - name: tz-config
+          mountPath: /etc/localtime
+          readOnly: true
+      volumes:
+      - name: rra-storage
+        persistentVolumeClaim:
+          claimName: cacti-rra-pvc
+      - name: tz-config
+        hostPath:
+          path: /etc/localtime
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cacti-service
+  namespace: cacti
+spec:
+  type: NodePort
+  ports:
+  - port: 80
+    targetPort: 80
+    nodePort: 30081
+  selector:
+    app: cacti-web
