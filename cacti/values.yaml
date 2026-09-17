@@ -4,8 +4,8 @@ appName: cacti-web
 
 # 2. 镜像配置 (这里填您之前的 Cacti 镜像名，假设是 ubuntu/cacti)
 image:
-  repository: docker.m.daocloud.io/library/nginx
-  tag: "1.25"
+  repository: docker.m.daocloud.io/quantumobject/docker-cacti
+  tag: "latest"
 
 # 3. Service 配置 (因为用了 Ingress，这里无需 NodePort，用内部 ClusterIP 即可)
 service:
