@@ -32,3 +32,22 @@ spec:
     nodePort: 30088
   selector:
     app: it-tools
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: it-tools-ingress
+  namespace: default
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: it-tools.10.80.2.211.nip.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: it-tools-service
+            port:
+              number: 80
